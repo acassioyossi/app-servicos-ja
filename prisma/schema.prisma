@@ -1,0 +1,240 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// Tipos de usuário (como string para SQLite)
+// CLIENT, PROFESSIONAL
+
+// Especialidades de profissionais (como string para SQLite)
+// PLUMBER, ELECTRICIAN, CLEANER, MECHANIC, PAINTER, CARPENTER, GARDENER, TECHNICIAN, OTHER
+
+// Status de transações (como string para SQLite)
+// PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED, REFUNDED
+
+// Tipos de transação (como string para SQLite)
+// PAYMENT, REFUND, BONUS, WITHDRAWAL
+
+// Status de mensagens (como string para SQLite)
+// SENT, DELIVERED, READ
+
+// Modelo principal de usuários
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  phone             String    @unique
+  name              String
+  type              String    // CLIENT ou PROFESSIONAL
+  document          String    @unique // CPF ou CNPJ
+  passwordHash      String
+  isActive          Boolean   @default(true)
+  isVerified        Boolean   @default(false)
+  wayneCashBalance  Float     @default(0.0)
+  
+  // Endereço
+  addressStreet       String
+  addressNumber       String
+  addressComplement   String?
+  addressNeighborhood String
+  addressCity         String
+  addressState        String
+  addressCountry      String
+  addressZipCode      String
+  
+  // Documentos (URLs dos arquivos)
+  documentPhotoFront  String?
+  documentPhotoBack   String?
+  
+  // Timestamps
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastLoginAt       DateTime?
+  
+  // Relacionamentos
+  professionalProfile ProfessionalProfile?
+  sentMessages        Message[] @relation("MessageSender")
+  receivedMessages    Message[] @relation("MessageReceiver")
+  transactions        Transaction[]
+  supportTickets      SupportTicket[]
+  refreshTokens       RefreshToken[]
+  
+  @@map("users")
+}
+
+// Perfil específico para profissionais
+model ProfessionalProfile {
+  id            String     @id @default(cuid())
+  userId        String     @unique
+  specialty     String     // PLUMBER, ELECTRICIAN, etc.
+  rating        Float      @default(0.0)
+  totalServices Int        @default(0)
+  isAvailable   Boolean    @default(true)
+  
+  // Dados do veículo (opcional)
+  vehicleType   String?
+  vehicleModel  String?
+  vehiclePlate  String?
+  vehicleColor  String?
+  vehicleYear   Int?
+  
+  // Documentos profissionais
+  cnhPhoto      String?    // CNH para profissionais com veículo
+  crmNumber     String?    // Para médicos
+  oabNumber     String?    // Para advogados
+  
+  // Timestamps
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  // Relacionamentos
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("professional_profiles")
+}
+
+// Mensagens de chat
+model Message {
+  id          String        @id @default(cuid())
+  content     String
+  senderId    String
+  receiverId  String
+  status      String        @default("SENT") // SENT, DELIVERED, READ
+  isSupport   Boolean       @default(false) // true para mensagens de suporte
+  
+  // Timestamps
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  readAt      DateTime?
+  
+  // Relacionamentos
+  sender      User          @relation("MessageSender", fields: [senderId], references: [id])
+  receiver    User          @relation("MessageReceiver", fields: [receiverId], references: [id])
+  
+  @@map("messages")
+}
+
+// Tickets de suporte
+model SupportTicket {
+  id          String    @id @default(cuid())
+  userId      String
+  subject     String
+  description String
+  status      String    @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  priority    String    @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  
+  // Timestamps
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  resolvedAt  DateTime?
+  
+  // Relacionamentos
+  user        User      @relation(fields: [userId], references: [id])
+  responses   SupportResponse[]
+  
+  @@map("support_tickets")
+}
+
+// Respostas de suporte
+model SupportResponse {
+  id        String        @id @default(cuid())
+  ticketId  String
+  content   String
+  isStaff   Boolean       @default(false) // true se for resposta da equipe
+  
+  // Timestamps
+  createdAt DateTime      @default(now())
+  
+  // Relacionamentos
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  
+  @@map("support_responses")
+}
+
+// Transações financeiras
+model Transaction {
+  id              String            @id @default(cuid())
+  userId          String
+  type            String            // PAYMENT, REFUND, BONUS, WITHDRAWAL
+  status          String            @default("PENDING") // PENDING, PROCESSING, COMPLETED, etc.
+  amount          Float
+  description     String
+  
+  // Dados do pagamento
+  paymentMethod   String? // credit-card, pix, wayne-cash
+  cardLast4       String?
+  cardBrand       String?
+  
+  // Endereço de cobrança
+  billingName     String?
+  billingEmail    String?
+  billingAddress  String?
+  billingCity     String?
+  billingState    String?
+  billingZipCode  String?
+  
+  // IDs externos (gateway de pagamento)
+  externalId      String?
+  gatewayResponse String?  // JSON como string para SQLite
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  processedAt     DateTime?
+  
+  // Relacionamentos
+  user            User     @relation(fields: [userId], references: [id])
+  
+  @@map("transactions")
+}
+
+// Tokens de refresh para autenticação
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  isRevoked Boolean  @default(false)
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  
+  // Relacionamentos
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("refresh_tokens")
+}
+
+// Log de atividades para auditoria
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String   // LOGIN, LOGOUT, PAYMENT, MESSAGE_SENT, etc.
+  details   String?  // JSON como string para SQLite
+  ipAddress String?
+  userAgent String?
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  
+  @@map("activity_logs")
+}
+
+// Configurações do sistema
+model SystemConfig {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("system_configs")
+}
